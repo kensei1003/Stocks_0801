@@ -1,0 +1,585 @@
+function firestoreData() {
+  //jsonファイルのemail、key、projectIdを読み込み、returnで返す
+  const prop = PropertiesService.getScriptProperties().getProperties();
+  const dataArray = {
+    "email":prop.FIRESTORE_EMAIL,
+    "key": prop.FIRESTORE_KEY,
+    "projectId": prop.FIRESTORE_ID
+  }
+  return dataArray;
+}
+
+
+// function testFirestoreData() {
+//   const dataArray = firestoreData();
+//   Logger.log(dataArray);
+// }
+
+
+
+
+
+
+function getBeginningStockFunction() {
+  const dataArray = firestoreData();//jsonファイルから読み込む
+  const firestore = FirestoreApp.getFirestore(dataArray.email, dataArray.key, dataArray.projectId);
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const stockSheet = ss.getSheetByName('在庫回転率');
+  
+  const products = firestore.getDocuments("products");
+
+  const productsFirebase = products.map((product) => {
+
+    //商品に関する情報が増えたら、ここを編集する↓ （増やしたら、下のスプレッドシートに書き込む処理の変数colNumも増やす)
+    return [
+      //product.fields.[firestore databaseの変数名].[(Stringとかintegerとか)Value]
+      product.fields.category.stringValue, //カテゴリ
+      product.fields.name.stringValue,//商品名
+      parseInt(product.fields.stock.integerValue),    //在庫数
+    ]
+  })
+  console.log(productsFirebase);
+  
+  //カテゴリー順でソート（見やすくするため）
+  productsFirebase.sort((a, b) => {
+    if(b[0] > a[0]){
+      return -1;
+    }else{
+      return 1;
+    }
+  });
+  
+  console.log(productsFirebase);
+  //現在の時刻を取得
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth() + 1;
+  const day = today.getDate();
+  const hours = today.getHours(); //時
+  const minutes = today.getMinutes(); //分
+  const seconds = today.getSeconds(); //秒
+    const lastUpdated = `${year}年${month}月${day}日`;
+
+
+
+  // スプレッドシートに書き込む処理↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+  // データの形の宣言
+  const row = 2             //最初のデータを入れる行番号
+  const col = 2             //最初のデータを入れる列番号
+  const rowNum = productsFirebase.length //行の長さ
+  const colNum = 3          //列の長さ  今後商品の情報が増えたらここの値も増やす
+
+  // スプレッドシートに記入
+  stockSheet.getRange(row, col, rowNum, colNum).setValues(productsFirebase);//在庫データを在庫シートに書き込む
+  stockSheet.getRange('A1').setValue(lastUpdated);
+  
+  return productsFirebase;//addStockFunctionの使用時にデータを渡す　getのみなら何も起こらず終了
+}
+
+
+
+
+
+
+
+
+
+
+
+
+//firebaseの在庫数をもとにスプレッドシートを更新する関数
+function getEndingStockFunction() {
+  const dataArray = firestoreData();//jsonファイルから読み込む
+  const firestore = FirestoreApp.getFirestore(dataArray.email, dataArray.key, dataArray.projectId);
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const stockSheet = ss.getSheetByName('在庫回転率');
+  const beginning = stockSheet.getRange('A1').getDisplayValue();
+  // console.log(beginning);
+  const products = firestore.getDocuments("products");
+
+  const productsFirebase = products.map((product) => {
+
+    //商品に関する情報が増えたら、ここを編集する↓ （増やしたら、下のスプレッドシートに書き込む処理の変数colNumも増やす)
+    return [
+      //product.fields.[firestore databaseの変数名].[(Stringとかintegerとか)Value]
+      product.fields.category.stringValue, //カテゴリ
+      product.fields.name.stringValue,//商品名
+      parseInt(product.fields.stock.integerValue),    //在庫数
+    ]
+  })
+  console.log(productsFirebase);
+  
+  //カテゴリー順でソート（見やすくするため）
+  productsFirebase.sort((a, b) => {
+    if(b[0] > a[0]){
+      return -1;
+    }else{
+      return 1;
+    }
+  });
+  
+  console.log(productsFirebase);
+  //現在の時刻を取得
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth() + 1;
+  const day = today.getDate();
+  const hours = today.getHours(); //時
+  const minutes = today.getMinutes(); //分
+  const seconds = today.getSeconds(); //秒
+  const lastUpdated = `${year}年${month}月${day}日`;
+
+
+
+
+ 
+
+  const purchases = firestore.getDocuments("purchases");
+  //　purchaseを取得するが、これだと商品が複数購入された際に、配列の中に商品の配列データが複数生成されてしまう(3次元配列になってしまう)ので、この後の処理で適切に処理する
+const prePurchasesRes = purchases.map((purchase) => {
+    //Utilities.formatDate(new Date(Date.parse(purchase.fields.purchaseDate.timestampValue)), 'JST', 'yyyy-MM-dd(E) 
+    let month = Utilities.formatDate(new Date(Date.parse(purchase.fields.purchaseDate.timestampValue)), 'JST', 'MM');
+    let day = Utilities.formatDate(new Date(Date.parse(purchase.fields.purchaseDate.timestampValue)), 'JST', 'dd');
+    let hour = Utilities.formatDate(new Date(Date.parse(purchase.fields.purchaseDate.timestampValue)), 'JST', 'HH');
+    let minute = Utilities.formatDate(new Date(Date.parse(purchase.fields.purchaseDate.timestampValue)), 'JST', 'mm');
+    const names = purchase.fields.items.arrayValue.values.map((name) => {
+      return [
+        Utilities.formatDate(new Date(Date.parse(purchase.fields.purchaseDate.timestampValue)), 'JST', 'yyyy年M月dd日'),
+        name.mapValue.fields.name.stringValue,
+        purchase.fields.uid.stringValue,
+        name.mapValue.fields.quantity.integerValue,
+        name.mapValue.fields.totalPrice.integerValue,
+        // purchase.fields.purchaseDate.timestampValue
+      ]
+
+    });
+    // const quantities = purchase.fields.items.arrayValue.values.map((quantity) => {
+    //   return quantity.mapValue.fields.quantity.integerValue
+    // });
+    
+    return [
+    // //  purchase.fields.purchaseDate.timestampValue,
+      names//購入された商品名
+
+    // //  quantities.join(" "),//購入された数
+    // //  purchase.fields.items.arrayValue.values[0].mapValue.fields
+
+    ]
+  });
+
+
+
+  //ここでprePurchaseResのデータを、適切な2次元配列の購入履歴データに置き換える
+  let purchasesRes = new Array;
+  prePurchasesRes.forEach(function(x) {
+    x.map(y => {
+      for(let i=0;i<y.length;i++){
+        purchasesRes.push(y[i]);
+        // console.log(y[i]);  //デバッグ用
+      }
+      
+      });
+    
+  });
+
+
+  //購入履歴を日付の新しい順に並び替える
+  purchasesRes.sort((a, b) => {
+    if(b[0] > a[0]){
+      return 1;
+    }else{
+      return -1;
+    }
+  });
+    
+
+
+
+ let stockCountMap = new Map();
+
+  for(let i=0;i<productsFirebase.length;i++){
+    stockCountMap.set(productsFirebase[i][1],0);
+    console.log(productsFirebase[i][1])
+  }
+
+  
+
+ let stockCountIdx = 0;
+ console.log(purchasesRes[stockCountIdx][0] >= beginning)
+  while(purchasesRes[stockCountIdx][0] >= beginning){
+    
+    let name = purchasesRes[stockCountIdx][1];
+    console.log(purchasesRes[stockCountIdx][0]+" "+beginning+" "+name+" "+stockCountMap.has(name));
+
+    if(stockCountMap.has(name)){
+      let cnt = stockCountMap.get(name);
+      stockCountMap.set(name, cnt+1);
+      
+    }
+    stockCountIdx++;
+  }
+
+
+
+stockCountMap.forEach(function(name){
+  console.log(stockCountMap.keys(name));
+});
+
+
+
+
+let issueData = new Array();
+for(let i=0;i<productsFirebase.length;i++){
+    issueData.push([stockCountMap.get(productsFirebase[i][1])]);
+    console.log(stockCountMap.get(productsFirebase[i][1]));
+  }
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  // スプレッドシートに書き込む処理↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+  // データの形の宣言
+  const row = 2             //最初のデータを入れる行番号
+  const col = 6             //最初のデータを入れる列番号
+  const rowNum = productsFirebase.length //行の長さ
+  const colNum = 3          //列の長さ  今後商品の情報が増えたらここの値も増やす
+
+  // スプレッドシートに記入
+  stockSheet.getRange(row, col, rowNum, colNum).setValues(productsFirebase);//在庫データを在庫シートに書き込む
+  stockSheet.getRange('F1').setValue(lastUpdated);
+  
+
+  stockSheet.getRange(row, col+3, rowNum, 1).setValues(issueData);//在庫データを在庫シートに書き込む
+
+
+
+  let stockRateSheet = ss.getSheetByName('在庫回転率');
+  let stockRate = stockRateSheet.getRange(row, col+3, rowNum, 1);
+
+  // let stockRateLogSheet = ss.getSheetByName('在庫回転率記録');
+  // stockRateLogSheet.getRange
+
+
+
+  
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//購入データを日付の新しい順に取得してコンソールに出力するプログラム（在庫更新には使っていない）
+function getPurchaseData() {
+  const dataArray = firestoreData();//jsonファイルから読み込む
+  const firestore = FirestoreApp.getFirestore(dataArray.email, dataArray.key, dataArray.projectId);
+  const purchases = firestore.getDocuments("purchases");
+  //　purchaseを取得するが、これだと商品が複数購入された際に、配列の中に商品の配列データが複数生成されてしまう(3次元配列になってしまう)ので、この後の処理で適切に処理する
+const prePurchasesRes = purchases.map((purchase) => {
+    //Utilities.formatDate(new Date(Date.parse(purchase.fields.purchaseDate.timestampValue)), 'JST', 'yyyy-MM-dd(E) 
+    let month = Utilities.formatDate(new Date(Date.parse(purchase.fields.purchaseDate.timestampValue)), 'JST', 'MM');
+    let day = Utilities.formatDate(new Date(Date.parse(purchase.fields.purchaseDate.timestampValue)), 'JST', 'dd');
+    let hour = Utilities.formatDate(new Date(Date.parse(purchase.fields.purchaseDate.timestampValue)), 'JST', 'HH');
+    let minute = Utilities.formatDate(new Date(Date.parse(purchase.fields.purchaseDate.timestampValue)), 'JST', 'mm');
+    const names = purchase.fields.items.arrayValue.values.map((name) => {
+      return [
+        Utilities.formatDate(new Date(Date.parse(purchase.fields.purchaseDate.timestampValue)), 'JST', 'yyyy-MM-dd(E)-HH-mm-ss'),
+        name.mapValue.fields.name.stringValue,
+        purchase.fields.uid.stringValue,
+        name.mapValue.fields.quantity.integerValue,
+        name.mapValue.fields.totalPrice.integerValue,
+        // purchase.fields.purchaseDate.timestampValue
+      ]
+
+    });
+    // const quantities = purchase.fields.items.arrayValue.values.map((quantity) => {
+    //   return quantity.mapValue.fields.quantity.integerValue
+    // });
+    
+    return [
+    // //  purchase.fields.purchaseDate.timestampValue,
+      names//購入された商品名
+
+    // //  quantities.join(" "),//購入された数
+    // //  purchase.fields.items.arrayValue.values[0].mapValue.fields
+
+    ]
+  });
+
+
+
+  //ここでprePurchaseResのデータを、適切な2次元配列の購入履歴データに置き換える
+  let purchasesRes = new Array;
+  prePurchasesRes.forEach(function(x) {
+    x.map(y => {
+      for(let i=0;i<y.length;i++){
+        purchasesRes.push(y[i]);
+        // console.log(y[i]);  //デバッグ用
+      }
+      
+      });
+    
+  });
+
+
+  //購入履歴を日付の新しい順に並び替える
+  purchasesRes.sort((a, b) => {
+    if(b[0] > a[0]){
+      return 1;
+    }else{
+      return -1;
+    }
+  });
+    
+    console.log(purchasesRes);  //デバッグ用
+    // console.log(purchasesRes[0][4]);
+
+//購入した月と購入額を購入データごとに保存
+const purchasesDate = purchases.map((purchase) => {
+    return [
+      Utilities.formatDate(new Date(Date.parse(purchase.fields.purchaseDate.timestampValue)), 'JST', 'yyyy年MM月'),
+      purchase.fields.totalPrice.integerValue,  
+    ]
+});
+console.log(purchasesDate);//デバッグ用
+
+  const purchaseMap = new Map();
+  const profitMap = new Map();
+   for(let i = 0; i<purchasesDate.length; i++){
+    let date = purchasesDate[i][0];
+    if(purchaseMap.has(date)){
+      let count = purchaseMap.get(date);
+      count++;
+      purchaseMap.set(date, count);
+      let sum = profitMap.get(date);
+      sum += parseInt(purchasesDate[i][1]);
+      profitMap.set(date, sum);
+    }else {
+      purchaseMap.set(date, 1);
+      profitMap.set(date, parseInt(purchasesDate[i][1]));
+    }
+    
+      // console.log(stockMap.get(itemName));  //デバッグ用
+   }
+
+
+
+  let purchaseCount = new Array();
+  purchaseMap.forEach((value,key)=> {
+      let sum = profitMap.get(key);
+      purchaseCount.push([key, value, sum]);
+  });
+
+  console.log(purchaseCount);
+
+
+//データを日付の新しい順にソート
+purchaseCount.sort((a, b) => {
+    if(b[0] > a[0]){
+      return 1;
+    }else{
+      return -1;
+    }
+  });
+
+
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const purchaseSheet = ss.getSheetByName('購入データ');
+
+  for(let i = 0; i< purchasesRes.length;i++){
+    purchasesRes[i].shift();
+  }
+  console.log(purchasesRes)
+  // データの形の宣言
+  const row = 2             //最初のデータを入れる行番号
+  const col = 1             //最初のデータを入れる列番号
+  const rowNum = purchasesRes.length //行の長さ
+  const colNum = 8          //列の長さ  
+  // スプレッドシートに記入
+
+  purchaseSheet.getRange(row, col, rowNum, colNum).setValues(purchasesRes);
+  purchaseSheet.getRange(3, 12, purchaseCount.length, 3).setValues(purchaseCount);
+
+
+
+}
+
+function analyzeSalesData() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const purchaseSheet = ss.getSheetByName('購入データ');
+  const analysisSheet = ss.getSheetByName('データ分析') || ss.insertSheet('データ分析');
+
+  // データの取得 (2行目から取得)
+  const data = purchaseSheet.getRange(2, 1, purchaseSheet.getLastRow() - 1, purchaseSheet.getLastColumn()).getValues();
+
+  // データを日付ごと、商品ごとに整理
+  const salesData = {};
+  const purchaseCountData = {};
+  const userCountData = {};
+  const allUniqueUsers = new Set();  // 全期間のユニークなユーザIDを格納するSet
+
+  // 週ごとのユニークユーザー数を格納するオブジェクト
+  const weeklyUniqueUsers = {};
+
+  data.forEach(row => {
+    const month = row[0];
+    const day = row[1];
+    const date = `${month}/${day}`;  // "月/日"フォーマット
+    const userId = row[5];  // ユーザーID
+    const productName = row[4];  // 商品名
+    const purchaseCount = row[6];  // 購入数
+    const sales = row[7];  // 売上
+
+    if (!salesData[date]) {
+      salesData[date] = {};
+      purchaseCountData[date] = {};
+      userCountData[date] = new Set();
+    }
+
+    if (!salesData[date][productName]) {
+      salesData[date][productName] = 0;
+      purchaseCountData[date][productName] = 0;
+    }
+
+    salesData[date][productName] += sales;
+    purchaseCountData[date][productName] += purchaseCount;
+    userCountData[date].add(userId);
+    allUniqueUsers.add(userId);  // 全期間のユニークなユーザIDをSetに追加
+
+    // 日付から曜日を取得
+    const dateObj = new Date(new Date().getFullYear(), month - 1, day);
+
+    // 週番号を計算
+    const weekNumber = WEEKNUM(dateObj);
+
+    // 週番号ごとのユニークユーザー数をカウント
+    if (!weeklyUniqueUsers[weekNumber]) {
+      weeklyUniqueUsers[weekNumber] = new Set();
+    }
+    weeklyUniqueUsers[weekNumber].add(userId);
+  });
+
+  // 分析シートのクリア
+  analysisSheet.clear();
+
+  // ヘッダーの追加
+  analysisSheet.appendRow(['日付', '曜日', '商品名', '購入数の総計', '一日あたりの売り上げ', '全商品の一日あたりの売り上げ', '前日比', '入店人数', '顧客単価', '全期間アクティブユーザー数', '週別ユニークユーザー数']);
+
+  // データの整理と挿入
+  const dates = Object.keys(salesData);
+
+  // 日付を月日の数値でソート
+  dates.sort((a, b) => {
+    const [monthA, dayA] = a.split('/').map(Number);
+    const [monthB, dayB] = b.split('/').map(Number);
+    return (monthA - monthB) || (dayA - dayB);
+  });
+
+  let previousTotalSales = 0;
+
+  dates.forEach((date, index) => {
+    const products = Object.keys(salesData[date]);
+    let totalSales = 0;
+    let totalPurchaseCount = 0;
+    const uniqueUsersCount = userCountData[date].size;
+
+    // 日付から曜日を取得
+    const [month, day] = date.split('/').map(Number);
+    const dateObj = new Date(new Date().getFullYear(), month - 1, day);
+    const weekday = ['日', '月', '火', '水', '木', '金', '土'][dateObj.getDay()];
+
+    // 週番号を取得
+    const weekNumber = WEEKNUM(dateObj);
+
+    // 週番号に対応するユニークユーザー数を取得
+    const weeklyUniqueUserCount = weeklyUniqueUsers[weekNumber].size; // ここで定義
+
+    // 商品ごとの売り上げを計算し、シートに追加
+    products.forEach(productName => {
+      const dailySales = salesData[date][productName];
+      const dailyPurchaseCount = purchaseCountData[date][productName];
+      totalSales += dailySales;
+      totalPurchaseCount += dailyPurchaseCount;
+
+      analysisSheet.appendRow([date, weekday, productName, dailyPurchaseCount, dailySales, '', '', '', '', allUniqueUsers.size, weeklyUniqueUserCount]);
+    });
+
+    // 全商品の一日あたりの売り上げを計算し、シートに追加
+    const dailyComparison = previousTotalSales ? totalSales - previousTotalSales : '';
+    const averageSalesPerCustomer = uniqueUsersCount ? totalSales / uniqueUsersCount : 0;
+    analysisSheet.appendRow([date, weekday, '全商品', totalPurchaseCount, '', totalSales, dailyComparison, uniqueUsersCount, averageSalesPerCustomer, allUniqueUsers.size, weeklyUniqueUserCount]); // ここで使用
+
+    previousTotalSales = totalSales;
+  });
+}
+
+// 週番号を計算する関数 
+function WEEKNUM(date) {
+  const startOfYear = new Date(date.getFullYear(), 0, 1);
+  const days = Math.floor((date - startOfYear) / (24 * 60 * 60 * 1000));
+  return Math.ceil((days + startOfYear.getDay() + 1) / 7);
+}
